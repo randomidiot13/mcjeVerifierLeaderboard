@@ -1,151 +1,92 @@
 <!DOCTYPE html>
-<html>
-<meta charset="UTF-8">
-
-<head>
-	<title>MCJE Verifier Leaderboard</title>
-</head>
-
-<body>
-	<style type="text/css">
-		@font-face {
-    font-family: 'minecraftregular';
-    src: url('minecraftregular-bmg3-webfont.woff2') format('woff2'),
-         url('minecraftregular-bmg3-webfont.woff') format('woff');
-    font-weight: normal;
-    font-style: normal;
-
-}
-		body{
-			background-color: rgba(0,0,0,0);
-		}
-		#table{
-			font-size: 500%;
-			/*font-family: Sans-serif;*/
-			font-family: minecraftregular;
-			background-color: #ffffff;
-			color: #7289da;
-			/*color: #ffffff;*/
-			table-layout: auto;
-			width: 100%;
-			border-collapse: collapse;
-		}
-		td{
-			/*border: 5px solid #99aab5;*/
-			/*border: 2px solid #2c2f33;*/
-			padding: 10px;
-		}
-	</style>
-	<div id="board">
-		<table id="table">
-		</table>
-	</div>
-	<script type="text/javascript">
-	function swap(json) {
-		var ret = {};
-		for (var key in json) {
-			ret[json[key]] = key;
-		}
-		return ret;
-	}
-
-	function sortObject(obj) {
-		return Object.keys(obj)
-			.sort().reduce((a, v) => {
-				a[v] = obj[v];
-				return a;
-			}, {});
-	}
-	function reverseObject(object) {
-        var newObject = {};
-        var keys = [];
-
-        for (var key in object) {
-            keys.push(key);
-        }
-
-        for (var i = keys.length - 1; i >= 0; i--) {
-          var value = object[keys[i]];
-          newObject[keys[i]]= value;
-        }       
-
-        return newObject;
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>MCJE Verifier Leaderboard</title>
+  </head>
+  <body>
+    <style type="text/css">
+      @font-face {
+        font-family: 'minecraftregular';
+        src: url('minecraftregular-bmg3-webfont.woff2') format('woff2'),
+             url('minecraftregular-bmg3-webfont.woff') format('woff');
+        font-weight: normal;
+        font-style: normal;
       }
-	let xhr = new XMLHttpRequest();
-	xhr.open("GET", "https://www.speedrun.com/api/v1/games/j1npme6p", false);
-	xhr.send();
-	let xhr4 = new XMLHttpRequest();
-	xhr4.open("GET", "https://www.speedrun.com/api/v1/games/nd2e9erd", false);
-	xhr4.send();
-	moderators = []
-	runsVerified = []
-	database = JSON.parse(xhr.responseText);
-	database2 = JSON.parse(xhr4.responseText);
-	for (key in database["data"]["moderators"]) {
-		moderators.push(key)
-	}
-	for (key in database2["data"]["moderators"]) {
-		if (!moderators.includes(key)) {
-			moderators.push(key)
-		}
-	}
-	let xhr2 = new XMLHttpRequest();
-	for (var i = moderators.length - 1; i >= 0; i--) {
-		xhr2.open("GET", "https://www.speedrun.com/api/v1/runs?game=j1npme6p&max=200&examiner=" + moderators[i], false);
-		xhr2.send();
-		runs = JSON.parse(xhr2.responseText)
-		runsVerifiedNumberMc = runs.pagination.size
-		do {
-			if (runs.pagination.size == 200) {
-				xhr2.open("GET", "https://www.speedrun.com/api/v1/runs?game=j1npme6p&max=200&examiner=" + moderators[i] + "&offset=" + runsVerifiedNumberMc, false);
-				xhr2.send();
-				runs = JSON.parse(xhr2.responseText)
-				runsVerifiedNumberMc += runs.pagination.size
-			}
+      body{
+        background-color: rgba(0,0,0,0);
+      }
+      #table{
+        font-size: 500%;
+        /*font-family: Sans-serif;*/
+        font-family: minecraftregular;
+        background-color: #ffffff;
+        color: #7289da;
+        /*color: #ffffff;*/
+        table-layout: auto;
+        width: 100%;
+        border-collapse: collapse;
+      }
+      td{
+        /*border: 5px solid #99aab5;*/
+        /*border: 2px solid #2c2f33;*/
+        padding: 10px;
+      }
+    </style>
+    <table id="output">
+    </table>
+    <script type="text/javascript">
+      const HEADER = "https://www.speedrun.com/api/v1/";
 
-		} while (runs.pagination.size == 200)
+      function json_from_url(url, xhr) {
+        xhr.open("GET", url, false);
+        xhr.send();
+        return JSON.parse(xhr.responseText);
+      }
 
-		xhr2.open("GET", "https://www.speedrun.com/api/v1/runs?game=nd2e9erd&max=200&examiner=" + moderators[i], false);
-		xhr2.send();
-		runs = JSON.parse(xhr2.responseText)
-		runsVerifiedNumberMcce = runs.pagination.size
-		do {
-			if (runs.pagination.size == 200) {
-				xhr2.open("GET", "https://www.speedrun.com/api/v1/runs?game=nd2e9erd&max=200&examiner=" + moderators[i] + "&offset=" + runsVerifiedNumberMcce, false);
-				xhr2.send();
-				runs = JSON.parse(xhr2.responseText)
-				runsVerifiedNumberMcce += runs.pagination.size
-			}
-		} while (runs.pagination.size == 200)
+      function json_from_src(short_url, xhr) {
+        return json_from_url(HEADER + short_url, xhr);
+      }
 
-		runsVerifiedNumber = runsVerifiedNumberMc + runsVerifiedNumberMcce
+      function continual_data(short_url, xhr) {
+        let hold = [];
+        let resp = json_from_src(short_url + (short_url.includes("?") ? "&max=200" : "?max=200"), xhr);
+        while (true) {
+          hold.push(...resp.data);
+          if (!("pagination" in resp) || (resp.pagination.size < 200))
+            break;
+          let linkMap = resp.pagination.links.reduce((newObj, x) => ({...newObj, [x.rel]: x.uri}), {});
+          resp = json_from_url(linkMap.next, xhr);
+        }
+        return hold;
+      }
 
-		runsVerified.push(runsVerifiedNumber)
-	}
-	runsVerified = runsVerified.reverse()
-	var result = {};
-	moderators.forEach((key, i) => result[key] = runsVerified[i]);
+      let xhr = new XMLHttpRequest();
+      let game = "j1npme6p";
+      let game2 = "nd2e9erd";
+      let gameObj = json_from_src(`games/${game}?embed=moderators`, xhr);
+      let game2Obj = json_from_src(`games/${game2}?embed=moderators`, xhr);
+      let modsObj = gameObj.data.moderators.data;
+      modsObj.push(...game2Obj.data.moderators.data);
+      let nameMap = modsObj.reduce((newObj, x) => ({...newObj, [x.id]: x.names.international}), {});
+      let moderators = Object.keys(nameMap);
 
-	result = swap(result)
-	result = sortObject(result)
-	result = swap(result)
-	result = reverseObject(result)
+      let dict = moderators.reduce((newObj, x) => ({...newObj, [x]: 0}), {});
+      for (mod of moderators) {
+        dict[mod] += continual_data(`runs?game=${game}&examiner=${mod}`, xhr).length;
+        dict[mod] += continual_data(`runs?game=${game2}&examiner=${mod}`, xhr).length;
+      }
+      let modsArray = [];
+      for (mod in dict)
+        modsArray.push([mod, dict[mod]]);
+      modsArray.sort(function(a, b) {return b[1] - a[1];});
 
-	//	result = Object.keys(result).sort(function(a,b){return result[a]-result[b]})
-	console.log(result);
-	let xhr3 = new XMLHttpRequest();
-	var output = ""
-	var place = 0
-	for (key in result) {
-		place++
-		xhr3.open("GET", "https://www.speedrun.com/api/v1/users/" + key, false);
-		xhr3.send();
-		ModName = JSON.parse(xhr3.responseText)
-		name2 = ModName["data"]["names"]["international"]
-		output += "<tr><td>"+place+"</td><td>" + name2 + "</td><td>" + result[key] + "</td><tr>"
-	}
-	document.getElementById("table").innerHTML = output
-	</script>
-</body>
-
+      let output = "";
+      for (let i = 1; i <= modsArray.length; i++) {
+        let mod = modsArray[i - 1];
+        output += `<tr><td>${i}</td><td>${nameMap[mod[0]]}</td><td>${mod[1]}</td></tr>`;
+      }
+      document.getElementById("output").innerHTML = output;
+    </script>
+  </body>
 </html>
