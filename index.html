@@ -38,55 +38,69 @@
     <script type="text/javascript">
       const HEADER = "https://www.speedrun.com/api/v1/";
 
-      function json_from_url(url, xhr) {
-        xhr.open("GET", url, false);
-        xhr.send();
-        return JSON.parse(xhr.responseText);
+      async function json_from_url_await(url) {
+        return await fetch(url)
+                     .then(resp => resp.json());
       }
 
-      function json_from_src(short_url, xhr) {
-        return json_from_url(HEADER + short_url, xhr);
+      async function json_from_src_await(short_url) {
+        return await json_from_url_await(HEADER + short_url);
       }
 
-      function continual_data(short_url, xhr) {
+      async function continual_data_await(short_url) {
         let hold = [];
-        let resp = json_from_src(short_url + (short_url.includes("?") ? "&max=200" : "?max=200"), xhr);
-        while (true) {
-          hold.push(...resp.data);
-          if (!("pagination" in resp) || (resp.pagination.size < 200))
-            break;
-          let linkMap = resp.pagination.links.reduce((newObj, x) => ({...newObj, [x.rel]: x.uri}), {});
-          resp = json_from_url(linkMap.next, xhr);
+
+        async function next_await(json) {
+          hold.push(...json.data);
+          if (!("pagination" in json) || (json.pagination.size < 200))
+            return;
+          let linkMap = json.pagination.links.reduce((newObj, x) => ({...newObj, [x.rel]: x.uri}), {});
+          await json_from_url_await(linkMap.next)
+                              .then(json => next_await(json));
         }
-        return hold;
+
+        return await json_from_src_await(short_url + (short_url.includes("?") ? "&max=200" : "?max=200"))
+                                   .then(json => next_await(json))
+                                   .then(() => hold);
       }
 
-      let xhr = new XMLHttpRequest();
-      let game = "j1npme6p";
-      let game2 = "nd2e9erd";
-      let gameObj = json_from_src(`games/${game}?embed=moderators`, xhr);
-      let game2Obj = json_from_src(`games/${game2}?embed=moderators`, xhr);
-      let modsObj = gameObj.data.moderators.data;
-      modsObj.push(...game2Obj.data.moderators.data);
-      let nameMap = modsObj.reduce((newObj, x) => ({...newObj, [x.id]: x.names.international}), {});
-      let moderators = Object.keys(nameMap);
+      async function main() {
+        let game = "j1npme6p";
+        let game2 = "nd2e9erd";
+        let gameObj = await json_from_src_await(`games/${game}?embed=moderators`);
+        let game2Obj = await json_from_src_await(`games/${game2}?embed=moderators`);
+        let modsObj = await gameObj.data.moderators.data;
+        await modsObj.push(...game2Obj.data.moderators.data);
+        let nameMap = await modsObj.reduce((newObj, x) => ({...newObj, [x.id]: x.names.international}), {});
+        let moderators = await Object.keys(nameMap);
+        let dict = await moderators.reduce((newObj, x) => ({...newObj, [x]: 0}), {});
 
-      let dict = moderators.reduce((newObj, x) => ({...newObj, [x]: 0}), {});
-      for (mod of moderators) {
-        dict[mod] += continual_data(`runs?game=${game}&examiner=${mod}`, xhr).length;
-        dict[mod] += continual_data(`runs?game=${game2}&examiner=${mod}`, xhr).length;
-      }
-      let modsArray = [];
-      for (mod in dict)
-        modsArray.push([mod, dict[mod]]);
-      modsArray.sort(function(a, b) {return b[1] - a[1];});
+        await(async function () {
+          let hold = [];
+          for (let mod of moderators) {
+            hold.push(continual_data_await(`runs?game=${game}&examiner=${mod}`)
+                                     .then(list => list.length)
+                                     .then(function (len) {dict[mod] += len;}));
+            hold.push(continual_data_await(`runs?game=${game2}&examiner=${mod}`)
+                                     .then(list => list.length)
+                                     .then(function (len) {dict[mod] += len;}));
+          }
+          await Promise.all(hold);
+          let modsArray = [];
+          for (mod in dict)
+            modsArray.push([mod, dict[mod]]);
+          modsArray.sort(function(a, b) {return b[1] - a[1];});
 
-      let output = "";
-      for (let i = 1; i <= modsArray.length; i++) {
-        let mod = modsArray[i - 1];
-        output += `<tr><td>${i}</td><td>${nameMap[mod[0]]}</td><td>${mod[1]}</td></tr>`;
+          let output = "";
+          for (let i = 1; i <= modsArray.length; i++) {
+            let mod = modsArray[i - 1];
+            output += `<tr><td>${i}</td><td>${nameMap[mod[0]]}</td><td>${mod[1]}</td></tr>`;
+          }
+          document.getElementById("output").innerHTML = output;
+        }());
       }
-      document.getElementById("output").innerHTML = output;
+
+      main();
     </script>
   </body>
 </html>
