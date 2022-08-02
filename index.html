@@ -67,6 +67,7 @@
       async function main() {
         let game = "j1npme6p";
         let game2 = "nd2e9erd";
+        let combined = "xd14pv8d"
         let gameObj = await json_from_src_await(`games/${game}?embed=moderators`);
         let game2Obj = await json_from_src_await(`games/${game2}?embed=moderators`);
         let modsObj = await gameObj.data.moderators.data;
@@ -81,6 +82,9 @@
             hold.push(continual_data_await(`runs?game=${game}&examiner=${mod}`)
                                      .then(list => list.length)
                                      .then(function (len) {dict[mod] += len;}));
+            hold.push(continual_data_await(`runs?game=${game}&examiner=${mod}&category=${combined}`)
+                                     .then(list => list.length)
+                                     .then(function (len) {dict[mod] -= len;}));
             hold.push(continual_data_await(`runs?game=${game2}&examiner=${mod}`)
                                      .then(list => list.length)
                                      .then(function (len) {dict[mod] += len;}));
